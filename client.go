@@ -5,29 +5,34 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
+var Reset = "\033[0m"
+var Red = "\033[31m"
+var Green = "\033[32m"
+
 func main() {
-	response, err := http.Get("http://localhost:8080/getCMD")
-	if err != nil {
-		fmt.Println("Error to connect the server", err)
+	for {
+		response, err := http.Get("http://localhost:8080/getCommand")
+		if err != nil {
+			fmt.Println("Error sending request:", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		body, err := ioutil.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil {
+			fmt.Println("Error reading response:", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
 
-		return
+		if string(body) != "no new command" {
+			command, _ := base64.StdEncoding.DecodeString(string(body))
+			fmt.Println("Executing command:", string(command))
+		}
+
+		time.Sleep(10 * time.Second) // Пауза между запросами
 	}
-
-	defer response.Body.Close()
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println("Eerror on Read Response", err)
-		return
-	}
-
-	command, err := base64.StdEncoding.DecodeString(string(body))
-	if err != nil {
-		fmt.Println("Error to decode body CMD", err)
-		return
-	}
-
-	fmt.Println("Received command from server:", string(command))
 }
